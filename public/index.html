@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>WebRTC Group Call — Mesh Topology</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+  <!-- ====== MÀN HÌNH ĐĂNG NHẬP PHÒNG ====== -->
+  <div id="lobby" class="lobby">
+    <div class="lobby-card">
+      <h1>🎥 WebRTC Group Call</h1>
+      <p class="subtitle">Gọi video nhóm theo phòng (Mesh Topology)</p>
+
+      <label>Tên của bạn</label>
+      <input id="inputName" type="text" placeholder="VD: Long, Nam, Hoa..." maxlength="30">
+
+      <label>Mã phòng (Room ID)</label>
+      <div class="row">
+        <input id="inputRoom" type="text" placeholder="VD: lop-th01, abc123" maxlength="30">
+        <button id="btnRandomRoom" type="button" title="Sinh mã phòng ngẫu nhiên">🎲</button>
+      </div>
+
+      <button id="btnJoin" class="btn-primary">Vào phòng</button>
+      <p id="lobbyStatus" class="status"></p>
+    </div>
+  </div>
+
+  <!-- ====== MÀN HÌNH GỌI VIDEO ====== -->
+  <div id="callRoom" class="call-room hidden">
+    <header class="call-header">
+      <div>
+        <span class="room-label">Phòng:</span>
+        <span id="roomIdDisplay" class="room-id"></span>
+        <button id="btnCopyRoom" title="Sao chép mã phòng">📋</button>
+      </div>
+      <div>
+        <span id="myNameDisplay" class="my-name"></span>
+        <button id="btnLeave" class="btn-danger">Rời phòng</button>
+      </div>
+    </header>
+
+    <!-- Khu vực video: grid tự động -->
+    <main id="videoGrid" class="video-grid"></main>
+
+    <!-- Bảng chat đơn giản (bonus) -->
+    <aside id="chatPanel" class="chat-panel">
+      <div id="chatMessages" class="chat-messages"></div>
+      <div class="chat-input">
+        <input id="chatInput" type="text" placeholder="Nhập tin nhắn...">
+        <button id="btnSendChat">Gửi</button>
+      </div>
+    </aside>
+
+    <!-- Thanh điều khiển media -->
+    <footer class="controls">
+      <button id="btnToggleMic">🎤 Tắt mic</button>
+      <button id="btnToggleCam">📷 Tắt cam</button>
+      <button id="btnToggleChat">💬 Chat</button>
+    </footer>
+  </div>
+
+  <!-- Template ô video cho từng peer -->
+  <template id="videoTileTemplate">
+    <div class="video-tile">
+      <video autoplay playsinline></video>
+      <div class="tile-label"></div>
+      <span class="conn-status" data-state="new" title="new">●</span>
+    </div>
+  </template>
+
+  <script src="ice-config.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

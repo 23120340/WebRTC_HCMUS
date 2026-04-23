@@ -1,0 +1,16 @@
+{
+  "name": "webrtc-group-call",
+  "version": "1.0.0",
+  "description": "WebRTC Group Video Call với TURN server và Room ID (Mesh Topology)",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "keywords": ["webrtc", "video-call", "turn", "coturn", "mesh"],
+  "author": "Bài tập Lập trình mạng",
+  "license": "MIT",
+  "dependencies": {
+    "express": "^4.19.2",
+    "ws": "^8.17.1"
+  }
+}
