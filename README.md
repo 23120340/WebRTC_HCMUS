@@ -4,7 +4,7 @@
 - **Room ID**: nhiều người vào cùng một phòng bằng mã phòng.
 - **Mesh topology**: mỗi peer kết nối P2P với tất cả các peer khác trong phòng.
 - **ICE đầy đủ**: STUN (Google) + TURN (Open Relay, miễn phí) — gọi được qua internet, xuyên NAT/firewall.
-- **Chat text** bonus đi qua signaling server.
+- **Chat text** đi qua signaling server.
 - Bật/tắt mic, cam, sao chép Room ID.
 
 ## Kiến trúc
@@ -34,20 +34,84 @@
 
 ```
 WebRTC_HCMUS/
-├── server.js              ← Signaling server (HTTPS + WSS)
+├── server.js              ← Signaling server (HTTPS local / HTTP cloud)
 ├── package.json
-├── certs/
-│   ├── key.pem            ← Sinh bằng openssl (đã có sẵn)
-│   └── cert.pem
 ├── public/
 │   ├── index.html         ← Giao diện lobby + call room
 │   ├── style.css
 │   ├── app.js             ← Client WebRTC (mesh + ICE logging)
-│   └── ice-config.js      ← Cấu hình STUN + TURN (xem bên dưới)
+│   └── ice-config.js      ← Cấu hình STUN + TURN
 ├── TURN-SETUP.md          ← Hướng dẫn tự cài coturn trên VPS (tham khảo thêm)
 ├── report.md              ← Báo cáo nộp bài
 └── README.md
 ```
+
+> `certs/` và `node_modules/` được loại khỏi git (xem `.gitignore`).
+
+---
+
+## Chạy trên mạng LAN
+
+### 1. Cài dependency
+
+```bash
+npm install
+```
+
+### 2. Sinh chứng chỉ SSL tự ký
+
+Trình duyệt chỉ cấp quyền `getUserMedia` trên HTTPS. Tạo cert tự ký cho chạy LAN:
+
+```bash
+mkdir certs
+openssl req -newkey rsa:2048 -nodes -keyout certs/key.pem -x509 -days 365 -out certs/cert.pem -subj "/CN=localhost"
+```
+
+### 3. Chạy server
+
+```bash
+npm start
+```
+
+Server lắng nghe tại `https://0.0.0.0:3000`.
+
+### 4. Mở từ các thiết bị
+
+1. Xem IP LAN của máy chạy server: `ipconfig` (Windows).
+2. Trên máy/điện thoại khác **cùng WiFi**, mở `https://<IP-LAN>:3000`.
+3. Trình duyệt cảnh báo "Not secure" (cert tự ký) → bấm **Advanced → Proceed**.
+4. Nhập tên + Room ID → **Vào phòng**.
+5. Mở tab/thiết bị thứ 2, 3… cùng Room ID để test mesh.
+
+> **Test nhanh trên 1 máy**: mở nhiều tab ẩn danh, mỗi tab một tên khác nhưng cùng Room ID.
+
+---
+
+## Deploy lên cloud (truy cập từ 4G / internet)
+
+Server tự động chuyển sang HTTP khi không tìm thấy `certs/` — phù hợp với Render/Railway/Fly.io (các platform này xử lý HTTPS ở tầng ngoài).
+
+### Deploy trên Render.com (miễn phí)
+
+1. Tạo tài khoản tại **[render.com](https://render.com)** (đăng nhập bằng GitHub).
+2. **New → Web Service** → chọn repo `WebRTC_HCMUS`.
+3. Điền cấu hình:
+
+| Trường | Giá trị |
+|--------|---------|
+| Region | Singapore |
+| Branch | `main` |
+| Runtime | Node |
+| Build Command | `npm install` |
+| Start Command | `node server.js` |
+| Instance Type | Free |
+
+4. Click **Deploy Web Service** → chờ ~2 phút.
+5. Render cấp URL dạng `https://webrtc-hcmus.onrender.com` — dùng URL này từ mọi thiết bị, mọi mạng.
+
+> **Lưu ý free tier:** Render free sleep sau 15 phút không có request. Lần đầu vào có thể chậm ~30s để wake up.
+
+---
 
 ## Cấu hình ICE (STUN + TURN)
 
@@ -80,47 +144,11 @@ window.ICE_CONFIG = {
 
 ---
 
-## Chạy trên mạng LAN
-
-### 1. Cài dependency
-
-```bash
-npm install
-```
-
-### 2. Sinh chứng chỉ SSL tự ký (nếu chưa có)
-
-```bash
-openssl req -newkey rsa:2048 -nodes -keyout certs/key.pem -x509 -days 365 -out certs/cert.pem -subj "/CN=localhost"
-```
-
-> Thư mục `certs/` đã có sẵn cert — bỏ qua bước này nếu đã tồn tại.
-
-### 3. Chạy server
-
-```bash
-npm start
-```
-
-Server lắng nghe tại `https://0.0.0.0:3000`.
-
-### 4. Mở từ các thiết bị
-
-1. Xem IP LAN của máy chạy server: `ipconfig` (Windows).
-2. Trên máy/điện thoại khác **cùng WiFi**, mở `https://<IP-LAN>:3000`.
-3. Trình duyệt cảnh báo "Not secure" (cert tự ký) → bấm **Advanced → Proceed**.
-4. Nhập tên + Room ID → **Vào phòng**.
-5. Mở tab/thiết bị thứ 2, 3… cùng Room ID để test mesh.
-
-> **Test nhanh trên 1 máy**: mở nhiều tab ẩn danh, mỗi tab một tên khác nhưng cùng Room ID.
-
----
-
 ## Thử nghiệm khác mạng (dùng TURN)
 
 Không cần thay đổi gì trong code. Chỉ cần:
 
-1. Chạy server như trên (hoặc deploy lên Render/Railway).
+1. Deploy lên Render (hoặc chạy server local với port forwarding).
 2. Một thiết bị dùng **WiFi nhà**, thiết bị kia bật **4G** (khác mạng).
 3. Cùng vào một Room ID.
 4. Nếu P2P thất bại, TURN sẽ tự động relay — xem log console:
@@ -129,28 +157,7 @@ Không cần thay đổi gì trong code. Chỉ cần:
 
 ---
 
-## Checklist nộp bài
-
-### Đã xong ✅
-
-- [x] Signaling server (WSS, nhiều phòng, mesh)
-- [x] Client WebRTC với `RTCPeerConnection` + `getUserMedia`
-- [x] Cấu hình `iceServers` đầy đủ: STUN (Google) + TURN (Open Relay)
-- [x] Log candidate type (`host` / `srflx` / `relay`) trong console
-- [x] Fallback: timeout 12s → `restartIce()` nếu P2P thất bại
-- [x] Giải thích ICE flow và 3 loại candidate trong `ice-config.js` + `report.md`
-- [x] `report.md` section 3: giải thích TURN là gì, khi nào dùng, cấu hình iceServers
-
-### Còn cần làm ✏️
-
-- [ ] **Chạy thử cùng LAN** → copy log console vào `report.md` section 4.1, thêm screenshot
-- [ ] **Chạy thử khác mạng (4G)** → copy log console vào `report.md` section 4.2, thêm screenshot
-- [ ] **Chạy thử gọi nhóm 3–4 người** → điền số liệu vào `report.md` section 4.3, thêm screenshot
-- [ ] Thay `[X]ms`, `[mô tả...]`, `[có/không]` trong `report.md` bằng kết quả thật
-
----
-
-## ICE hoạt động thế nào (tóm tắt)
+## ICE hoạt động thế nào
 
 ICE thử kết nối theo thứ tự ưu tiên:
 
@@ -182,11 +189,34 @@ Mesh phù hợp ≤6 người. Lớn hơn nên dùng SFU (mediasoup, LiveKit…)
 
 ---
 
+## Checklist nộp bài
+
+### Đã xong ✅
+
+- [x] Signaling server (WSS, nhiều phòng, mesh)
+- [x] Client WebRTC với `RTCPeerConnection` + `getUserMedia`
+- [x] Cấu hình `iceServers` đầy đủ: STUN (Google) + TURN (Open Relay)
+- [x] Log candidate type (`host` / `srflx` / `relay`) trong console
+- [x] Fallback: timeout 12s → `restartIce()` nếu P2P thất bại
+- [x] Giải thích ICE flow và 3 loại candidate trong `ice-config.js` + `report.md`
+- [x] `report.md` section 3: giải thích TURN là gì, khi nào dùng, cấu hình iceServers
+- [x] Deploy lên cloud (Render) — truy cập được từ 4G / internet
+
+### Còn cần làm ✏️
+
+- [ ] **Chạy thử cùng LAN** → copy log console vào `report.md` section 4.1, thêm screenshot
+- [ ] **Chạy thử khác mạng (4G)** → copy log console vào `report.md` section 4.2, thêm screenshot
+- [ ] **Chạy thử gọi nhóm 3–4 người** → điền số liệu vào `report.md` section 4.3, thêm screenshot
+- [ ] Thay `[X]ms`, `[mô tả...]`, `[có/không]` trong `report.md` bằng kết quả thật
+
+---
+
 ## Debug
 
 | Vấn đề | Cách kiểm tra |
 |---|---|
 | Không connect được | DevTools → Console xem `iceConnectionState` |
-| Muốn xem phòng đang mở | Mở `https://<server>:3000/rooms` |
+| Muốn xem phòng đang mở | Mở `https://<server>/rooms` |
 | Xem chi tiết ICE | Chrome: `chrome://webrtc-internals/` |
 | TURN có hoạt động không | Console phải có `Candidate gathered: typ=relay` |
+| Server sleep (Render free) | Tải lại trang, chờ ~30s để wake up |
