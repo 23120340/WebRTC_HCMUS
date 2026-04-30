@@ -286,11 +286,292 @@ function leaveRoom(ws) {
 
 // --------- 4. Endpoint debug: xem phòng đang mở ---------
 app.get('/rooms', (req, res) => {
-  const info = {};
-  for (const [id, room] of rooms.entries()) {
-    info[id] = Array.from(room.values()).map(p => p.name);
+  // ?json=1 → trả về JSON thuần (dùng cho script/curl)
+  if (req.query.json !== undefined) {
+    const info = {};
+    for (const [id, room] of rooms.entries()) {
+      info[id] = Array.from(room.values()).map(p => p.name);
+    }
+    return res.json(info);
   }
-  res.json(info);
+
+  const roomList = [];
+  for (const [id, room] of rooms.entries()) {
+    roomList.push({ id, members: Array.from(room.values()).map(p => p.name) });
+  }
+
+  const totalPeers = roomList.reduce((s, r) => s + r.members.length, 0);
+  const now = new Date().toLocaleTimeString('vi-VN');
+
+  const roomCards = roomList.length === 0
+    ? `<div class="empty">
+         <svg width="56" height="56" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round">
+           <path d="M15 10l4.553-2.069A1 1 0 0121 8.82v6.36a1 1 0 01-1.447.89L15 14"/>
+           <rect x="3" y="6" width="12" height="12" rx="3"/>
+           <line x1="2" y1="2" x2="22" y2="22"/>
+         </svg>
+         <div class="empty-title">Chưa có phòng nào đang hoạt động</div>
+         <div class="empty-hint">Vào <a href="/">trang chính</a> để tạo phòng mới</div>
+       </div>`
+    : roomList.map((r, i) => {
+        const memberTags = r.members
+          .map(name => `<span class="tag"><span class="tag-dot"></span>${escapeHtml(name)}</span>`)
+          .join('');
+        const connections = r.members.length * (r.members.length - 1) / 2;
+        return `
+          <div class="room-card" style="animation-delay:${i * 0.06}s">
+            <div class="room-header">
+              <span class="room-id-badge">${escapeHtml(r.id)}</span>
+              <span class="room-meta">${r.members.length} người · ${connections} kết nối P2P</span>
+            </div>
+            <div class="member-list">${memberTags}</div>
+          </div>`;
+      }).join('');
+
+  function escapeHtml(s) {
+    return String(s).replace(/[&<>"']/g, c =>
+      ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  }
+
+  res.send(`<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Phòng đang hoạt động — WebRTC</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Vina+Sans&family=Montserrat:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'Montserrat', -apple-system, sans-serif;
+      background: #030712;
+      color: #f1f5f9;
+      min-height: 100vh;
+      overflow-x: hidden;
+    }
+
+    /* Ambient orbs */
+    .orb {
+      position: fixed; border-radius: 50%;
+      filter: blur(80px); pointer-events: none; z-index: 0;
+    }
+    .orb-1 {
+      width: 500px; height: 500px;
+      background: radial-gradient(circle, rgba(59,130,246,.16) 0%, transparent 70%);
+      top: -160px; left: -120px;
+    }
+    .orb-2 {
+      width: 420px; height: 420px;
+      background: radial-gradient(circle, rgba(99,102,241,.12) 0%, transparent 70%);
+      top: 5%; right: -120px;
+    }
+
+    /* Sticky header */
+    header {
+      position: sticky; top: 0; z-index: 10;
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 12px 28px;
+      background: rgba(3,7,18,.78);
+      backdrop-filter: blur(22px);
+      -webkit-backdrop-filter: blur(22px);
+      border-bottom: 1px solid rgba(255,255,255,.08);
+    }
+    .hd-left { display: flex; align-items: center; gap: 12px; }
+    .hd-logo {
+      width: 36px; height: 36px;
+      background: linear-gradient(135deg, #3b82f6, #6366f1);
+      border-radius: 10px;
+      display: flex; align-items: center; justify-content: center;
+      box-shadow: 0 4px 14px rgba(59,130,246,.35);
+      flex-shrink: 0;
+    }
+    header h1 {
+      font-family: 'Vina Sans', sans-serif;
+      font-size: 20px; font-weight: 400;
+      letter-spacing: .12em;
+      background: linear-gradient(135deg, #f1f5f9, #94a3b8);
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+    .hd-back {
+      display: flex; align-items: center; gap: 6px;
+      font-size: 12px; font-weight: 600;
+      color: #94a3b8; text-decoration: none;
+      padding: 7px 14px;
+      border: 1px solid rgba(255,255,255,.1);
+      border-radius: 8px;
+      transition: border-color .2s, color .2s;
+    }
+    .hd-back:hover { border-color: #3b82f6; color: #f1f5f9; }
+
+    main { position: relative; z-index: 1; max-width: 740px; margin: 36px auto; padding: 0 20px 40px; }
+
+    /* Refresh bar */
+    .refresh-bar {
+      display: flex; align-items: center; justify-content: space-between;
+      margin-bottom: 20px; gap: 12px;
+    }
+    .live-badge {
+      display: flex; align-items: center; gap: 8px;
+      font-size: 12px; font-weight: 600; color: #94a3b8;
+    }
+    .dot {
+      width: 8px; height: 8px; border-radius: 50%;
+      background: #22c55e;
+      box-shadow: 0 0 8px rgba(34,197,94,.6);
+      animation: pulse 2s infinite;
+    }
+    @keyframes pulse { 0%,100%{opacity:1;} 50%{opacity:.35;} }
+    .refresh-btn {
+      display: flex; align-items: center; gap: 6px;
+      background: rgba(255,255,255,.05);
+      border: 1px solid rgba(255,255,255,.1);
+      color: #f1f5f9;
+      padding: 7px 14px; border-radius: 8px;
+      cursor: pointer;
+      font-family: 'Montserrat', sans-serif;
+      font-size: 12px; font-weight: 600;
+      transition: background .2s, border-color .2s;
+    }
+    .refresh-btn:hover { background: rgba(255,255,255,.09); border-color: rgba(255,255,255,.2); }
+
+    /* Stats */
+    .stats-bar { display: flex; gap: 14px; margin-bottom: 28px; flex-wrap: wrap; }
+    .stat {
+      flex: 1; min-width: 130px;
+      background: rgba(255,255,255,.04);
+      backdrop-filter: blur(18px); -webkit-backdrop-filter: blur(18px);
+      border: 1px solid rgba(255,255,255,.08);
+      border-radius: 14px;
+      padding: 18px 22px;
+      animation: fadeUp .4s cubic-bezier(.22,1,.36,1) both;
+    }
+    .stat:nth-child(2) { animation-delay: .07s; }
+    @keyframes fadeUp { from{opacity:0;transform:translateY(16px)} to{opacity:1;transform:none} }
+    .stat-value {
+      font-family: 'Vina Sans', sans-serif;
+      font-size: 36px; font-weight: 400;
+      background: linear-gradient(135deg, #3b82f6, #6366f1);
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+      background-clip: text;
+      line-height: 1;
+    }
+    .stat-label { font-size: 11px; font-weight: 600; color: #64748b; margin-top: 6px; letter-spacing: .06em; text-transform: uppercase; }
+
+    /* Room cards */
+    .room-card {
+      background: rgba(255,255,255,.04);
+      backdrop-filter: blur(18px); -webkit-backdrop-filter: blur(18px);
+      border: 1px solid rgba(255,255,255,.08);
+      border-radius: 16px;
+      padding: 20px 24px;
+      margin-bottom: 14px;
+      transition: border-color .2s, box-shadow .2s, transform .2s;
+      animation: fadeUp .45s cubic-bezier(.22,1,.36,1) both;
+    }
+    .room-card:hover {
+      border-color: rgba(59,130,246,.4);
+      box-shadow: 0 0 0 1px rgba(59,130,246,.1);
+      transform: translateY(-2px);
+    }
+    .room-header {
+      display: flex; align-items: center; justify-content: space-between;
+      margin-bottom: 14px; flex-wrap: wrap; gap: 10px;
+    }
+    .room-id-badge {
+      font-family: 'Courier New', monospace;
+      font-weight: 700; font-size: 15px;
+      background: rgba(59,130,246,.1);
+      border: 1px solid rgba(59,130,246,.25);
+      color: #93c5fd;
+      padding: 5px 14px; border-radius: 20px;
+      letter-spacing: .04em;
+    }
+    .room-meta { font-size: 12px; font-weight: 600; color: #64748b; letter-spacing: .03em; }
+    .member-list { display: flex; flex-wrap: wrap; gap: 8px; }
+    .tag {
+      display: flex; align-items: center; gap: 6px;
+      background: rgba(255,255,255,.06);
+      border: 1px solid rgba(255,255,255,.1);
+      color: #cbd5e1;
+      font-size: 12px; font-weight: 600;
+      padding: 5px 12px; border-radius: 20px;
+    }
+    .tag-dot { width: 6px; height: 6px; border-radius: 50%; background: #22c55e; flex-shrink: 0; }
+
+    /* Empty state */
+    .empty {
+      text-align: center; padding: 80px 20px;
+      color: #334155;
+      animation: fadeUp .5s cubic-bezier(.22,1,.36,1) both;
+    }
+    .empty svg { margin-bottom: 20px; opacity: .4; }
+    .empty-title { font-size: 16px; font-weight: 700; color: #475569; margin-bottom: 8px; }
+    .empty-hint { font-size: 13px; color: #334155; }
+    .empty-hint a { color: #3b82f6; text-decoration: none; }
+    .empty-hint a:hover { text-decoration: underline; }
+  </style>
+</head>
+<body>
+  <div class="orb orb-1"></div>
+  <div class="orb orb-2"></div>
+
+  <header>
+    <div class="hd-left">
+      <div class="hd-logo">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M15 10l4.553-2.069A1 1 0 0121 8.82v6.36a1 1 0 01-1.447.89L15 14"/>
+          <rect x="3" y="6" width="12" height="12" rx="3"/>
+        </svg>
+      </div>
+      <h1>WebRTC Rooms</h1>
+    </div>
+    <a class="hd-back" href="/">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+        <polyline points="15 18 9 12 15 6"/>
+      </svg>
+      Trang chính
+    </a>
+  </header>
+
+  <main>
+    <div class="refresh-bar">
+      <div class="live-badge">
+        <span class="dot"></span>
+        Cập nhật lúc ${now} · làm mới sau <span id="cd" style="color:#f1f5f9;font-weight:700;margin:0 2px">10</span>s
+      </div>
+      <button class="refresh-btn" onclick="location.reload()">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 11-2.12-9.36L23 10"/>
+        </svg>
+        Làm mới
+      </button>
+    </div>
+
+    <div class="stats-bar">
+      <div class="stat">
+        <div class="stat-value">${roomList.length}</div>
+        <div class="stat-label">Phòng đang mở</div>
+      </div>
+      <div class="stat">
+        <div class="stat-value">${totalPeers}</div>
+        <div class="stat-label">Người kết nối</div>
+      </div>
+    </div>
+
+    ${roomCards}
+  </main>
+
+  <script>
+    let s = 10;
+    const el = document.getElementById('cd');
+    setInterval(() => { s--; el.textContent = s; if (s <= 0) location.reload(); }, 1000);
+  </script>
+</body>
+</html>`);
 });
 
 // --------- 5. Khởi động server ---------

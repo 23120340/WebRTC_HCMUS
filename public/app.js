@@ -40,11 +40,11 @@ async function joinRoom() {
   const name   = $('#inputName').value.trim();
   const roomId = $('#inputRoom').value.trim();
   if (!name || !roomId) {
-    lobbyStatus.textContent = '⚠️  Vui lòng nhập tên và mã phòng.';
+    lobbyStatus.textContent = '  Vui lòng nhập tên và mã phòng.';
     return;
   }
 
-  lobbyStatus.textContent = '⏳ Đang xin quyền camera/micro...';
+  lobbyStatus.textContent = ' Đang xin quyền camera/micro...';
   $('#btnJoin').disabled = true;
 
   // Lấy local stream TRƯỚC khi mở WebSocket để khi nhận peer list đã có track
@@ -54,7 +54,7 @@ async function joinRoom() {
       audio: true
     });
   } catch (err) {
-    lobbyStatus.textContent = '❌ Không truy cập được camera/micro: ' + err.message;
+    lobbyStatus.textContent = ' Không truy cập được camera/micro: ' + err.message;
     $('#btnJoin').disabled = false;
     return;
   }
@@ -66,14 +66,14 @@ async function joinRoom() {
   ws = new WebSocket(wsUrl);
 
   ws.onopen = () => {
-    lobbyStatus.textContent = '✅ Đã kết nối signaling. Đang vào phòng...';
+    lobbyStatus.textContent = ' Đã kết nối signaling. Đang vào phòng...';
     ws.send(JSON.stringify({ type: 'join', roomId, name }));
   };
 
   ws.onmessage = handleSignalingMessage;
 
   ws.onerror = () => {
-    lobbyStatus.textContent = '❌ Không kết nối được server signaling.';
+    lobbyStatus.textContent = ' Không kết nối được server signaling.';
     $('#btnJoin').disabled = false;
   };
 
@@ -97,7 +97,7 @@ async function handleSignalingMessage(event) {
 
     case 'welcome':
       myId = msg.clientId;
-      console.log('👋 Welcome, myId =', myId);
+      console.log(' Welcome, myId =', myId);
       break;
 
     case 'joined':
@@ -112,7 +112,7 @@ async function handleSignalingMessage(event) {
       break;
 
     case 'peer-joined':
-      addChatSystem(`👋 ${msg.name} đã vào phòng`);
+      addChatSystem(`${msg.name} đã vào phòng`);
       break;
 
     case 'memberLeft':
@@ -132,7 +132,7 @@ async function handleSignalingMessage(event) {
       break;
 
     case 'endCall':
-      addChatSystem(`📵 ${msg.senderName} đã kết thúc cuộc gọi`);
+      addChatSystem(`${msg.senderName} đã kết thúc cuộc gọi`);
       leaveRoom();
       break;
 
@@ -151,7 +151,7 @@ function onJoinedRoom(existingPeers) {
   lobby.classList.add('hidden');
   callRoom.classList.remove('hidden');
   $('#roomIdDisplay').textContent = currentRoom;
-  $('#myNameDisplay').textContent = `👤 ${myName}`;
+  $('#myNameDisplay').innerHTML = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-1px"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/></svg> ${escapeHtml(myName)}`;
 
   addVideoTile('local', myName + ' (bạn)', localStream, true);
 
@@ -160,12 +160,12 @@ function onJoinedRoom(existingPeers) {
     createPeerConnection(peer.id, peer.name, /* isInitiator */ true);
   }
 
-  addChatSystem(`🎉 Bạn đã vào phòng "${currentRoom}"`);
+  addChatSystem(`Bạn đã vào phòng "${currentRoom}"`);
 }
 
 // ================== TẠO PEER CONNECTION ==================
 async function createPeerConnection(peerId, peerName, isInitiator) {
-  console.log(`🔗 Tạo PC tới ${peerName} (${peerId}), initiator=${isInitiator}`);
+  console.log(` Tạo PC tới ${peerName} (${peerId}), initiator=${isInitiator}`);
 
   const pc = new RTCPeerConnection(window.ICE_CONFIG);
   const tile = addVideoTile(peerId, peerName, null, false);
@@ -179,20 +179,31 @@ async function createPeerConnection(peerId, peerName, isInitiator) {
 
   // Nhận remote track → gắn vào video element
   pc.ontrack = (event) => {
-    console.log(`📹 Nhận remote track từ ${peerName}`);
+    console.log(` Nhận remote track từ ${peerName}`);
     if (videoEl.srcObject !== event.streams[0]) {
       videoEl.srcObject = event.streams[0];
     }
   };
 
-  // Gửi ICE candidate khi trình duyệt tìm ra
+  // Gửi ICE candidate khi trình duyệt tìm ra + log loại candidate
   pc.onicecandidate = (event) => {
     if (event.candidate) {
+      // Parse loại candidate từ SDP string: "... typ host|srflx|relay ..."
+      const candType = event.candidate.candidate.match(/\btyp\s+(\w+)/)?.[1] ?? 'unknown';
+      const candPreview = event.candidate.candidate.substring(0, 70);
+      console.log(`[${peerName}]  Candidate gathered: typ=${candType}  ${candPreview}…`);
       sendSignal('candidate', peerId, event.candidate);
+    } else {
+      console.log(`[${peerName}]  ICE gathering hoàn tất (null candidate)`);
     }
   };
 
-  // Log iceConnectionState
+  // Log tiến trình gathering: new → gathering → complete
+  pc.onicegatheringstatechange = () => {
+    console.log(`[${peerName}] iceGatheringState=${pc.iceGatheringState}`);
+  };
+
+  // Log iceConnectionState (checking → connected → completed)
   pc.oniceconnectionstatechange = () => {
     console.log(`[${peerName}] iceConnectionState=${pc.iceConnectionState}`);
   };
@@ -204,7 +215,7 @@ async function createPeerConnection(peerId, peerName, isInitiator) {
   const p2pTimeout = setTimeout(() => {
     if (pc.connectionState !== 'connected' && pc.connectionState !== 'closed') {
       console.warn(`[${peerName}] P2P thất bại sau 12s, đang thử TURN relay...`);
-      addChatSystem(`⚠️ P2P với ${peerName} thất bại, đang thử TURN relay...`);
+      addChatSystem(`P2P với ${peerName} thất bại, đang thử TURN relay...`);
       pc.restartIce();
     }
   }, 12000);
@@ -223,7 +234,7 @@ async function createPeerConnection(peerId, peerName, isInitiator) {
     if (state === 'connected') {
       clearTimeout(p2pTimeout);
       const setupMs = Date.now() - callStartTime;
-      console.log(`✅ [${peerName}] Kết nối thành công sau ${setupMs}ms`);
+      console.log(` [${peerName}] Kết nối thành công sau ${setupMs}ms`);
       logConnectionStats(pc, peerName, callStartTime);
     }
 
@@ -236,7 +247,7 @@ async function createPeerConnection(peerId, peerName, isInitiator) {
     if (state === 'disconnected' || state === 'closed') {
       clearTimeout(p2pTimeout);
       const endTime = new Date().toLocaleTimeString('vi-VN');
-      console.log(`📵 [${peerName}] Kết nối kết thúc lúc ${endTime}`);
+      console.log(` [${peerName}] Kết nối kết thúc lúc ${endTime}`);
     }
   };
 
@@ -279,7 +290,7 @@ async function logConnectionStats(pc, peerName, callStartTime) {
     const setupMs = Date.now() - callStartTime;
     const now = new Date().toISOString();
     console.log(
-      `📊 Thống kê kết nối [${peerName}]:\n` +
+      ` Thống kê kết nối [${peerName}]:\n` +
       `   Thời điểm kết nối: ${now}\n` +
       `   Thời gian setup:   ${setupMs}ms\n` +
       `   Loại candidate:    ${candidateType}\n` +
@@ -291,9 +302,8 @@ async function logConnectionStats(pc, peerName, callStartTime) {
       [...peers.entries()].find(([, v]) => v.pc === pc)?.[0]
     );
     if (peerData?.statusEl) {
-      peerData.statusEl.textContent = candidateType === 'relay' ? '🔀' :
-                                      candidateType === 'srflx' ? '🌐' : '🏠';
-      peerData.statusEl.title = `${candidateType} (${setupMs}ms)`;
+      peerData.statusEl.title = `${candidateType} · ${setupMs}ms`;
+      peerData.statusEl.dataset.candType = candidateType;
     }
   } catch (e) {
     console.error('getStats error:', e);
@@ -346,7 +356,7 @@ function onPeerLeft(peerId, peerName) {
     if (tile) tile.remove();
     peers.delete(peerId);
   }
-  addChatSystem(`👋 ${peerName || peerId} đã rời phòng`);
+  addChatSystem(`${peerName || peerId} đã rời phòng`);
 }
 
 // ================== UI: VIDEO TILE ==================
@@ -380,20 +390,31 @@ function sendSignal(type, targetId, payload) {
 }
 
 // ================== MEDIA CONTROLS ==================
+const ICON = {
+  micOn: `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1a3 3 0 00-3 3v8a3 3 0 006 0V4a3 3 0 00-3-3z"/><path d="M19 10v2a7 7 0 01-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>`,
+  micOff: `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><line x1="1" y1="1" x2="23" y2="23"/><path d="M9 9v3a3 3 0 005.12 2.12M15 9.34V4a3 3 0 00-5.94-.6"/><path d="M17 16.95A7 7 0 015 12v-2m14 0v2a7 7 0 01-.11 1.23"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>`,
+  camOn: `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M15 10l4.553-2.069A1 1 0 0121 8.82v6.36a1 1 0 01-1.447.89L15 14"/><rect x="3" y="6" width="12" height="12" rx="3"/></svg>`,
+  camOff: `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M16 16v1a2 2 0 01-2 2H3a2 2 0 01-2-2V7a2 2 0 012-2h2m5.66 0H14a2 2 0 012 2v3.34l1 1 5-4.34v10"/><line x1="1" y1="1" x2="23" y2="23"/></svg>`,
+};
+
 $('#btnToggleMic').addEventListener('click', () => {
   const track = localStream?.getAudioTracks()[0];
   if (!track) return;
   track.enabled = !track.enabled;
-  $('#btnToggleMic').textContent = track.enabled ? '🎤 Tắt mic' : '🔇 Bật mic';
-  $('#btnToggleMic').classList.toggle('off', !track.enabled);
+  const btn = $('#btnToggleMic');
+  btn.innerHTML = track.enabled ? ICON.micOn : ICON.micOff;
+  btn.dataset.label = track.enabled ? 'Tắt mic' : 'Bật mic';
+  btn.classList.toggle('off', !track.enabled);
 });
 
 $('#btnToggleCam').addEventListener('click', () => {
   const track = localStream?.getVideoTracks()[0];
   if (!track) return;
   track.enabled = !track.enabled;
-  $('#btnToggleCam').textContent = track.enabled ? '📷 Tắt cam' : '📵 Bật cam';
-  $('#btnToggleCam').classList.toggle('off', !track.enabled);
+  const btn = $('#btnToggleCam');
+  btn.innerHTML = track.enabled ? ICON.camOn : ICON.camOff;
+  btn.dataset.label = track.enabled ? 'Tắt cam' : 'Bật cam';
+  btn.classList.toggle('off', !track.enabled);
 });
 
 $('#btnToggleChat').addEventListener('click', () => {
@@ -404,8 +425,13 @@ $('#btnLeave').addEventListener('click', leaveRoom);
 
 $('#btnCopyRoom').addEventListener('click', () => {
   navigator.clipboard?.writeText(currentRoom);
-  $('#btnCopyRoom').textContent = '✔';
-  setTimeout(() => ($('#btnCopyRoom').textContent = '📋'), 1200);
+  const btn = $('#btnCopyRoom');
+  btn.innerHTML = '✔';
+  btn.style.color = '#22c55e';
+  setTimeout(() => {
+    btn.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>`;
+    btn.style.color = '';
+  }, 1400);
 });
 
 // ================== CHAT ==================
@@ -423,7 +449,7 @@ function sendChat() {
 function addChatMessage(from, text) {
   const div = document.createElement('div');
   div.className = 'chat-msg';
-  div.innerHTML = `<span class="from">${escapeHtml(from)}:</span> ${escapeHtml(text)}`;
+  div.innerHTML = `<div class="from">${escapeHtml(from)}</div><div class="body">${escapeHtml(text)}</div>`;
   chatMessages.appendChild(div);
   chatMessages.scrollTop = chatMessages.scrollHeight;
 }

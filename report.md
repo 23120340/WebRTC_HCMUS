@@ -11,21 +11,22 @@
         Room "abc123"      Room "lop-TH01"
          ┌─┼─┐               ┌─┼─┐
          │ │ │               │ │ │
-     Peer A B C           Peer D E F    ← media đi trực tiếp P2P (mesh)
+     Peer A B C           Peer D E F    ← media đi P2P trực tiếp (host/srflx candidate)
      A↔B, A↔C, B↔C
                               ↑
                               │ khi P2P thất bại (NAT đối xứng, firewall)
                               ↓
-                      ┌──────────────┐
-                      │ TURN (coturn)│  ← relay toàn bộ media
-                      │  VPS Linux   │
-                      └──────────────┘
+                 ┌──────────────────────────────┐
+                 │ TURN: Open Relay             │  ← relay toàn bộ media
+                 │ openrelay.metered.ca         │    (relay candidate)
+                 │ Miễn phí, không cần VPS      │
+                 └──────────────────────────────┘
 ```
 
 **Thành phần:**
 - **Signaling server**: Node.js (Express + ws), HTTPS port 3000
 - **Client**: HTML5 + Vanilla JS, dùng `getUserMedia` + `RTCPeerConnection`
-- **TURN server**: coturn trên VPS Ubuntu (xem `TURN-SETUP.md`)
+- **TURN server**: Open Relay Project (`openrelay.metered.ca`) — miễn phí, không cần VPS
 - **Topology**: Mesh — N peer → N×(N−1)/2 kết nối P2P
 
 ---
@@ -67,26 +68,47 @@ Tất cả message đều là JSON qua WebSocket (WSS).
 
 **File**: `public/ice-config.js`
 
+### 3.1 Luồng ICE và 3 loại candidate
+
+WebRTC dùng framework **ICE (Interactive Connectivity Establishment)** để tự động tìm đường kết nối tốt nhất giữa 2 peer:
+
+| Loại candidate | Sinh ra bởi | Khi nào dùng |
+|---|---|---|
+| `host` | Trực tiếp từ network interface | 2 peer cùng LAN — nhanh nhất |
+| `srflx` (server reflexive) | STUN server phản chiếu IP công cộng | 2 peer khác mạng, NAT đơn giản |
+| `relay` | TURN server làm trung gian relay | NAT đối xứng, firewall chặn UDP |
+
+ICE sẽ thử theo thứ tự ưu tiên: `host` → `srflx` → `relay`. Nếu STUN đủ là không cần TURN. Chỉ khi P2P hoàn toàn thất bại, trình duyệt mới dùng `relay`.
+
+### 3.2 Cấu hình iceServers
+
 ```javascript
 window.ICE_CONFIG = {
   iceServers: [
+    // STUN: giúp peer khám phá IP công cộng → sinh srflx candidate
     { urls: 'stun:stun.l.google.com:19302' },
     { urls: 'stun:stun1.l.google.com:19302' },
+
+    // TURN: relay media khi P2P thất bại → sinh relay candidate
+    // Open Relay (miễn phí, không cần đăng ký)
     {
       urls: [
-        'turn:<HOST>:3478?transport=udp',
-        'turn:<HOST>:3478?transport=tcp',
-        'turns:<HOST>:5349?transport=tcp'
+        'turn:openrelay.metered.ca:80',
+        'turn:openrelay.metered.ca:443',
+        'turn:openrelay.metered.ca:443?transport=tcp',
+        'turns:openrelay.metered.ca:443?transport=tcp'
       ],
-      username: 'webrtcuser',
-      credential: 'webrtcpass123'
+      username: 'openrelayproject',
+      credential: 'openrelayproject'
     }
   ],
   iceCandidatePoolSize: 10
 };
 ```
 
-TURN server: coturn trên VPS (xem `TURN-SETUP.md` để biết cách cài và test).
+**Lưu ý thiết kế**: STUN và TURN được khai báo trong hai entry riêng biệt. STUN không cần credential; TURN bắt buộc phải có `username` và `credential` để xác thực với TURN server.
+
+**TURN server sử dụng**: [Open Relay Project](https://www.metered.ca/tools/openrelay/) — dịch vụ TURN miễn phí không cần đăng ký, đủ dùng để demo và kiểm thử. Nếu muốn dùng thực tế hoặc cần băng thông lớn hơn, có thể tự triển khai coturn trên VPS theo hướng dẫn trong `TURN-SETUP.md`.
 
 ---
 
