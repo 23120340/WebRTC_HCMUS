@@ -418,7 +418,23 @@ $('#btnToggleCam').addEventListener('click', () => {
 });
 
 $('#btnToggleChat').addEventListener('click', () => {
-  chatPanel.classList.toggle('hidden-panel');
+  if (window.innerWidth <= 768) {
+    chatPanel.classList.add('mobile-open');
+    chatPanel.querySelector('#chatInput')?.focus();
+  } else {
+    chatPanel.classList.toggle('hidden-panel');
+  }
+});
+
+$('#btnCloseChat').addEventListener('click', () => {
+  chatPanel.classList.remove('mobile-open');
+});
+
+// Reset về desktop state khi xoay màn hình / resize
+window.addEventListener('resize', () => {
+  if (window.innerWidth > 768) {
+    chatPanel.classList.remove('mobile-open');
+  }
 });
 
 $('#btnLeave').addEventListener('click', leaveRoom);

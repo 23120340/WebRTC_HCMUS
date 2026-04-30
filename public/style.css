@@ -498,7 +498,24 @@ body {
   text-transform: uppercase;
   color: var(--text-2);
   border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
 }
+
+/* Nút đóng chat — chỉ hiện trên mobile */
+.chat-back-btn {
+  display: none;
+  align-items: center; justify-content: center;
+  width: 28px; height: 28px;
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text-2);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: border-color .2s, color .2s;
+  margin-right: 4px;
+}
+.chat-back-btn:hover { border-color: var(--accent); color: var(--text-1); }
 
 .chat-messages {
   flex: 1;
@@ -568,7 +585,7 @@ body {
 
 /* ================ RESPONSIVE ================ */
 @media (max-width: 768px) {
-  /* Lobby: căn trên thay vì giữa, cho phép scroll khi bàn phím mở */
+  /* --- Lobby --- */
   .lobby {
     align-items: flex-start;
     padding: 24px 16px;
@@ -580,17 +597,49 @@ body {
   .lobby-card h1 { font-size: 26px; }
   .subtitle { margin-bottom: 20px; }
 
-  /* Chat panel overlay trên call room */
-  .chat-panel {
-    position: absolute;
-    right: 0; top: 53px; bottom: 57px;
-    z-index: 10;
-    width: 280px;
+  /* --- Call room: dùng dvh để tính đúng trên iOS --- */
+  .call-room {
+    grid-template-columns: 1fr;
   }
 
+  /* --- Video grid: 1 cột --- */
   .video-grid { grid-template-columns: 1fr; }
-  .ctrl-btn span { display: none; }
 
-  /* Nút điều khiển nhỏ hơn trên mobile */
+  /* --- Controls --- */
+  .ctrl-btn span { display: none; }
   .ctrl-btn { width: 46px; height: 46px; }
+
+  /* -------------------------------------------------------
+   * CHAT PANEL: ẩn mặc định, slide-in full-screen từ phải
+   * ------------------------------------------------------- */
+  .chat-panel {
+    position: fixed;
+    inset: 0;
+    z-index: 50;
+    width: 100% !important;
+    border-left: none;
+    border-radius: 0;
+    /* Bắt đầu ngoài màn hình (bên phải) */
+    transform: translateX(100%);
+    transition: transform 0.3s cubic-bezier(.22, 1, .36, 1);
+  }
+
+  /* hidden-panel trên mobile: transform đã xử lý, reset lại các override của desktop */
+  .chat-panel.hidden-panel {
+    width: 100% !important;
+    opacity: 1;
+    overflow: hidden;
+    border-left: none;
+    transform: translateX(100%);
+  }
+
+  /* Trạng thái mở: slide vào trong */
+  .chat-panel.mobile-open {
+    transform: translateX(0) !important;
+  }
+
+  /* Hiện nút đóng chat trên mobile */
+  .chat-back-btn {
+    display: flex !important;
+  }
 }
