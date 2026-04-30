@@ -27,7 +27,7 @@ body {
   background: var(--bg);
   color: var(--text-1);
   min-height: 100vh;
-  overflow: hidden;
+  overflow-x: hidden;
 }
 
 .hidden { display: none !important; }
@@ -74,6 +74,8 @@ body {
   justify-content: center;
   min-height: 100vh;
   padding: 20px;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
 }
 
 .lobby-card {
@@ -222,6 +224,8 @@ body {
   grid-template-rows: auto 1fr auto;
   grid-template-columns: 1fr auto;
   height: 100vh;
+  height: 100dvh; /* dynamic viewport height — tính cả thanh địa chỉ trên mobile */
+  overflow: hidden;
 }
 
 /* Header */
@@ -564,14 +568,29 @@ body {
 
 /* ================ RESPONSIVE ================ */
 @media (max-width: 768px) {
-  .lobby-card { padding: 32px 24px; }
-  .lobby-card h1 { font-size: 28px; }
+  /* Lobby: căn trên thay vì giữa, cho phép scroll khi bàn phím mở */
+  .lobby {
+    align-items: flex-start;
+    padding: 24px 16px;
+  }
+  .lobby-card {
+    padding: 28px 20px;
+    margin: auto 0;
+  }
+  .lobby-card h1 { font-size: 26px; }
+  .subtitle { margin-bottom: 20px; }
+
+  /* Chat panel overlay trên call room */
   .chat-panel {
     position: absolute;
     right: 0; top: 53px; bottom: 57px;
     z-index: 10;
     width: 280px;
   }
+
   .video-grid { grid-template-columns: 1fr; }
   .ctrl-btn span { display: none; }
+
+  /* Nút điều khiển nhỏ hơn trên mobile */
+  .ctrl-btn { width: 46px; height: 46px; }
 }
