@@ -368,6 +368,43 @@ body {
   z-index: 1;
 }
 
+/* Pin button — hiện khi hover tile */
+.pin-btn {
+  position: absolute;
+  top: 10px; left: 10px;
+  width: 28px; height: 28px;
+  background: rgba(3,7,18,.65);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border: 1px solid rgba(255,255,255,.15);
+  border-radius: 6px;
+  color: var(--text-2);
+  cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  opacity: 0;
+  transition: opacity .2s, color .2s, border-color .2s, background .2s;
+  z-index: 2;
+}
+.video-tile:hover .pin-btn { opacity: 1; }
+.pin-btn.active {
+  opacity: 1;
+  color: var(--accent);
+  border-color: rgba(59,130,246,.5);
+  background: rgba(59,130,246,.15);
+}
+
+/* Pinned layout — spotlight mode */
+.video-grid.has-pin {
+  grid-template-columns: 1fr 176px;
+  align-items: start;
+}
+.video-grid.has-pin .video-tile.pinned {
+  grid-column: 1;
+}
+.video-grid.has-pin .video-tile:not(.pinned) {
+  grid-column: 2;
+}
+
 /* Connection status badge */
 .conn-status {
   position: absolute;
@@ -621,6 +658,22 @@ body {
 
   /* --- Video grid: 1 cột --- */
   .video-grid { grid-template-columns: 1fr; }
+
+  /* Pinned layout trên mobile: 1 cột, tile phụ nhỏ bên dưới */
+  .video-grid.has-pin {
+    grid-template-columns: 1fr;
+  }
+  .video-grid.has-pin .video-tile.pinned,
+  .video-grid.has-pin .video-tile:not(.pinned) {
+    grid-column: 1;
+  }
+  .video-grid.has-pin .video-tile:not(.pinned) {
+    aspect-ratio: 16/9;
+    max-height: 90px;
+  }
+
+  /* Pin button luôn hiện trên mobile (không có hover) */
+  .pin-btn { opacity: 1; }
 
   /* --- Controls --- */
   .ctrl-btn span { display: none; }

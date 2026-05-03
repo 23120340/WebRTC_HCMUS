@@ -20,6 +20,7 @@ let currentRoom = null;
 const peers = new Map();   // peerId -> { pc, name, videoEl, statusEl }
 let screenStream = null;
 let isScreenSharing = false;
+let pinnedId = null;
 
 // ================== DOM ==================
 const $ = (sel) => document.querySelector(sel);
@@ -178,6 +179,13 @@ async function createPeerConnection(peerId, peerName, isInitiator) {
 
   // Đưa local tracks vào peer connection
   localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
+
+  // Nếu đang share màn hình, peer mới phải nhận screen track ngay từ đầu
+  if (isScreenSharing && screenStream) {
+    const screenTrack = screenStream.getVideoTracks()[0];
+    const videoSender = pc.getSenders().find(s => s.track?.kind === 'video');
+    if (videoSender && screenTrack) videoSender.replaceTrack(screenTrack);
+  }
 
   // Nhận remote track → gắn vào video element
   pc.ontrack = (event) => {
@@ -351,6 +359,7 @@ async function onReceiveIce(fromId, candidate) {
 
 // ================== PEER LEFT ==================
 function onPeerLeft(peerId, peerName) {
+  if (pinnedId === peerId) unpinAll();
   const peer = peers.get(peerId);
   if (peer) {
     peer.pc.close();
@@ -372,12 +381,21 @@ function addVideoTile(id, label, stream, isLocal) {
   if (stream) video.srcObject = stream;
   if (isLocal) {
     video.muted = true;
-    // Ô local không cần badge trạng thái
     const statusEl = tile.querySelector('.conn-status');
     if (statusEl) statusEl.remove();
+    const pinBtn = tile.querySelector('.pin-btn');
+    if (pinBtn) pinBtn.remove();
+  } else {
+    const pinBtn = tile.querySelector('.pin-btn');
+    if (pinBtn) {
+      pinBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        togglePin(id);
+      });
+    }
   }
   videoGrid.appendChild(tile);
-  return tile;  // trả về tile để caller lấy video + statusEl
+  return tile;
 }
 
 // ================== GỬI TÍN HIỆU TỚI PEER QUA WS ==================
@@ -538,6 +556,32 @@ function updateScreenShareBtn() {
   }
 }
 
+// ================== PIN ==================
+function togglePin(peerId) {
+  if (pinnedId === peerId) {
+    unpinAll();
+  } else {
+    unpinAll();
+    const tile = videoGrid.querySelector(`[data-peer-id="${peerId}"]`);
+    if (tile) {
+      tile.classList.add('pinned');
+      tile.querySelector('.pin-btn')?.classList.add('active');
+    }
+    pinnedId = peerId;
+    videoGrid.classList.add('has-pin');
+  }
+}
+
+function unpinAll() {
+  const pinned = videoGrid.querySelector('.video-tile.pinned');
+  if (pinned) {
+    pinned.classList.remove('pinned');
+    pinned.querySelector('.pin-btn')?.classList.remove('active');
+  }
+  pinnedId = null;
+  videoGrid.classList.remove('has-pin');
+}
+
 // ================== CHAT ==================
 $('#btnSendChat').addEventListener('click', sendChat);
 $('#chatInput').addEventListener('keydown', e => { if (e.key === 'Enter') sendChat(); });
@@ -598,6 +642,10 @@ function leaveRoom() {
     ws.close();
   }
 
+  // Bỏ ghim
+  pinnedId = null;
+  videoGrid.classList.remove('has-pin');
+
   // Reset UI
   videoGrid.innerHTML = '';
   chatMessages.innerHTML = '';
@@ -607,6 +655,17 @@ function leaveRoom() {
   lobbyStatus.textContent = '';
   myId = null;
   currentRoom = null;
+
+  // Reset trạng thái nút mic/cam về mặc định (bật)
+  const btnMic = $('#btnToggleMic');
+  btnMic.innerHTML = ICON.micOn;
+  btnMic.dataset.label = 'Tắt mic';
+  btnMic.classList.remove('off');
+
+  const btnCam = $('#btnToggleCam');
+  btnCam.innerHTML = ICON.camOn;
+  btnCam.dataset.label = 'Tắt cam';
+  btnCam.classList.remove('off');
 }
 
 // Cảnh báo khi đóng tab
