@@ -471,6 +471,23 @@ body {
   box-shadow: 0 8px 20px rgba(239,68,68,.2);
 }
 
+/* Screen sharing active state */
+.ctrl-btn--sharing {
+  background: rgba(59,130,246,.18);
+  border-color: rgba(59,130,246,.5);
+  color: #93c5fd;
+  box-shadow: 0 0 0 1px rgba(59,130,246,.2), 0 0 16px rgba(59,130,246,.15);
+  animation: sharing-pulse 2.5s ease-in-out infinite;
+}
+.ctrl-btn--sharing:hover {
+  background: rgba(59,130,246,.28);
+  border-color: rgba(59,130,246,.7);
+}
+@keyframes sharing-pulse {
+  0%, 100% { box-shadow: 0 0 0 1px rgba(59,130,246,.2), 0 0 16px rgba(59,130,246,.15); }
+  50%       { box-shadow: 0 0 0 1px rgba(59,130,246,.4), 0 0 24px rgba(59,130,246,.3); }
+}
+
 /* ================ CHAT PANEL ================ */
 .chat-panel {
   width: 300px;

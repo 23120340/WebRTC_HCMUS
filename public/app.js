@@ -18,6 +18,8 @@ let myId = null;
 let myName = null;
 let currentRoom = null;
 const peers = new Map();   // peerId -> { pc, name, videoEl, statusEl }
+let screenStream = null;
+let isScreenSharing = false;
 
 // ================== DOM ==================
 const $ = (sel) => document.querySelector(sel);
@@ -395,6 +397,8 @@ const ICON = {
   micOff: `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><line x1="1" y1="1" x2="23" y2="23"/><path d="M9 9v3a3 3 0 005.12 2.12M15 9.34V4a3 3 0 00-5.94-.6"/><path d="M17 16.95A7 7 0 015 12v-2m14 0v2a7 7 0 01-.11 1.23"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>`,
   camOn: `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M15 10l4.553-2.069A1 1 0 0121 8.82v6.36a1 1 0 01-1.447.89L15 14"/><rect x="3" y="6" width="12" height="12" rx="3"/></svg>`,
   camOff: `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M16 16v1a2 2 0 01-2 2H3a2 2 0 01-2-2V7a2 2 0 012-2h2m5.66 0H14a2 2 0 012 2v3.34l1 1 5-4.34v10"/><line x1="1" y1="1" x2="23" y2="23"/></svg>`,
+  screenOn:  `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="13" rx="2"/><path d="M8 21h8"/><path d="M12 16v5"/><polyline points="10 8 12 6 14 8"/><line x1="12" y1="6" x2="12" y2="13"/></svg>`,
+  screenOff: `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="13" rx="2"/><path d="M8 21h8"/><path d="M12 16v5"/><line x1="9.5" y1="7.5" x2="14.5" y2="12.5"/><line x1="14.5" y1="7.5" x2="9.5" y2="12.5"/></svg>`,
 };
 
 $('#btnToggleMic').addEventListener('click', () => {
@@ -437,6 +441,8 @@ window.addEventListener('resize', () => {
   }
 });
 
+$('#btnScreenShare').addEventListener('click', toggleScreenShare);
+
 $('#btnLeave').addEventListener('click', leaveRoom);
 
 $('#btnCopyRoom').addEventListener('click', () => {
@@ -449,6 +455,88 @@ $('#btnCopyRoom').addEventListener('click', () => {
     btn.style.color = '';
   }, 1400);
 });
+
+// ================== SCREEN SHARE ==================
+async function toggleScreenShare() {
+  if (isScreenSharing) {
+    await stopScreenShare();
+  } else {
+    await startScreenShare();
+  }
+}
+
+async function startScreenShare() {
+  try {
+    screenStream = await navigator.mediaDevices.getDisplayMedia({
+      video: { cursor: 'always' },
+      audio: false
+    });
+  } catch (err) {
+    if (err.name !== 'NotAllowedError') console.error('getDisplayMedia:', err);
+    return;
+  }
+
+  const screenTrack = screenStream.getVideoTracks()[0];
+
+  // Swap video track trên tất cả peer connections (không cần renegotiate)
+  const swaps = [];
+  for (const [, peer] of peers.entries()) {
+    const sender = peer.pc.getSenders().find(s => s.track?.kind === 'video');
+    if (sender) swaps.push(sender.replaceTrack(screenTrack));
+  }
+  await Promise.all(swaps);
+
+  // Cập nhật local video tile
+  const localVideo = document.querySelector('[data-peer-id="local"] video');
+  if (localVideo) {
+    localVideo.srcObject = new MediaStream([screenTrack, ...localStream.getAudioTracks()]);
+  }
+
+  isScreenSharing = true;
+  updateScreenShareBtn();
+
+  // Người dùng bấm "Stop sharing" trên trình duyệt → tự dừng
+  screenTrack.addEventListener('ended', stopScreenShare, { once: true });
+}
+
+async function stopScreenShare() {
+  if (!isScreenSharing) return;
+
+  screenStream?.getTracks().forEach(t => t.stop());
+  screenStream = null;
+
+  // Khôi phục camera track
+  const cameraTrack = localStream?.getVideoTracks()[0];
+  if (cameraTrack) {
+    const swaps = [];
+    for (const [, peer] of peers.entries()) {
+      const sender = peer.pc.getSenders().find(s => s.track?.kind === 'video');
+      if (sender) swaps.push(sender.replaceTrack(cameraTrack));
+    }
+    await Promise.all(swaps);
+  }
+
+  // Khôi phục local video
+  const localVideo = document.querySelector('[data-peer-id="local"] video');
+  if (localVideo) localVideo.srcObject = localStream;
+
+  isScreenSharing = false;
+  updateScreenShareBtn();
+}
+
+function updateScreenShareBtn() {
+  const btn = $('#btnScreenShare');
+  if (!btn) return;
+  if (isScreenSharing) {
+    btn.innerHTML = ICON.screenOff;
+    btn.dataset.label = 'Dừng chia sẻ';
+    btn.classList.add('ctrl-btn--sharing');
+  } else {
+    btn.innerHTML = ICON.screenOn;
+    btn.dataset.label = 'Chia sẻ màn hình';
+    btn.classList.remove('ctrl-btn--sharing');
+  }
+}
 
 // ================== CHAT ==================
 $('#btnSendChat').addEventListener('click', sendChat);
@@ -486,6 +574,14 @@ function escapeHtml(s) {
 
 // ================== LEAVE ROOM ==================
 function leaveRoom() {
+  // Dừng screen share nếu đang chia sẻ
+  if (isScreenSharing) {
+    screenStream?.getTracks().forEach(t => t.stop());
+    screenStream = null;
+    isScreenSharing = false;
+    updateScreenShareBtn();
+  }
+
   // Đóng tất cả peer connection
   for (const [, peer] of peers.entries()) {
     peer.pc.close();
