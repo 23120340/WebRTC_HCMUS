@@ -220,13 +220,36 @@ async function createPeerConnection(peerId, peerName, isInitiator) {
 
   // ---- Hiển thị connectionState trên tile + xử lý fallback ----
   const callStartTime = Date.now();
+  let iceRestartCount = 0;
+  const MAX_ICE_RESTARTS = 2;
 
-  // Timeout: 12 giây không kết nối được → thông báo đang thử TURN
+  async function doIceRestart() {
+    if (iceRestartCount >= MAX_ICE_RESTARTS) {
+      console.error(`[${peerName}] Đã thử ${MAX_ICE_RESTARTS} lần restartIce, bỏ cuộc.`);
+      addChatSystem(`Không thể kết nối tới ${peerName} — kiểm tra TURN server.`);
+      return;
+    }
+    iceRestartCount++;
+    console.warn(`[${peerName}] ICE restart lần ${iceRestartCount}/${MAX_ICE_RESTARTS}...`);
+    if (isInitiator) {
+      try {
+        const offer = await pc.createOffer({ iceRestart: true });
+        await pc.setLocalDescription(offer);
+        sendSignal('offer', peerId, offer);
+      } catch (err) {
+        console.error(`[${peerName}] Lỗi tạo offer khi ICE restart:`, err);
+      }
+    } else {
+      pc.restartIce();
+    }
+  }
+
+  // Timeout: 12 giây không kết nối được → thử ICE restart với TURN
   const p2pTimeout = setTimeout(() => {
     if (pc.connectionState !== 'connected' && pc.connectionState !== 'closed') {
       console.warn(`[${peerName}] P2P thất bại sau 12s, đang thử TURN relay...`);
       addChatSystem(`P2P với ${peerName} thất bại, đang thử TURN relay...`);
-      pc.restartIce();
+      doIceRestart();
     }
   }, 12000);
 
@@ -243,6 +266,7 @@ async function createPeerConnection(peerId, peerName, isInitiator) {
 
     if (state === 'connected') {
       clearTimeout(p2pTimeout);
+      iceRestartCount = 0;
       const setupMs = Date.now() - callStartTime;
       console.log(` [${peerName}] Kết nối thành công sau ${setupMs}ms`);
       logConnectionStats(pc, peerName, callStartTime);
@@ -250,8 +274,7 @@ async function createPeerConnection(peerId, peerName, isInitiator) {
 
     if (state === 'failed') {
       clearTimeout(p2pTimeout);
-      console.warn(`[${peerName}] connectionState=failed, thử restartIce()...`);
-      pc.restartIce();
+      doIceRestart();
     }
 
     if (state === 'disconnected' || state === 'closed') {
@@ -282,10 +305,15 @@ async function logConnectionStats(pc, peerName, callStartTime) {
     let candidateType = 'unknown';
     let localCandidateId = null;
 
-    // Tìm candidate pair đang được chọn (nominated=true, state=succeeded)
+    // Tìm candidate pair đang được chọn: nominated=true, state=succeeded, priority cao nhất
+    let bestPriority = -1;
     stats.forEach(report => {
       if (report.type === 'candidate-pair' && report.nominated && report.state === 'succeeded') {
-        localCandidateId = report.localCandidateId;
+        const priority = report.priority ?? 0;
+        if (priority > bestPriority) {
+          bestPriority = priority;
+          localCandidateId = report.localCandidateId;
+        }
       }
     });
 

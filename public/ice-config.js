@@ -17,14 +17,13 @@
  *
  *  3. relay  — TURN server relay toàn bộ media. Bắt buộc khi
  *              một hoặc cả hai peer nằm sau symmetric NAT hoặc
- *              firewall chặn UDP. Chậm hơn nhưng đảm bảo kết
- *              nối thành công trong mọi tình huống.
+ *              firewall chặt UDP (thường gặp với 4G/5G).
  *
  *  Cấu hình này dùng:
  *  - STUN : Google STUN (miễn phí, công khai)
- *  - TURN : Open Relay Project (openrelay.metered.ca)
- *           → Miễn phí, không cần đăng ký, đủ để demo và thử
- *             nghiệm bài tập. Không cần VPS hay tự vận hành.
+ *  - TURN : freestun.net (miễn phí, không cần đăng ký)
+ *           + Metered.ca (đăng ký miễn phí tại metered.ca
+ *             → App Settings → TURN Credentials)
  * ============================================================
  */
 window.ICE_CONFIG = {
@@ -33,18 +32,30 @@ window.ICE_CONFIG = {
     { urls: 'stun:stun.l.google.com:19302' },
     { urls: 'stun:stun1.l.google.com:19302' },
 
-    // ---- TURN: relay media khi P2P thất bại → sinh relay candidate ----
-    // Open Relay (https://www.metered.ca/tools/openrelay/) — miễn phí, không cần đăng ký
+    // ---- TURN: freestun.net — miễn phí, không cần tài khoản ----
     {
       urls: [
-        'turn:openrelay.metered.ca:80',            // UDP qua cổng 80 (vượt hầu hết firewall)
-        'turn:openrelay.metered.ca:443',            // UDP qua cổng 443
-        'turn:openrelay.metered.ca:443?transport=tcp', // TCP qua cổng 443
-        'turns:openrelay.metered.ca:443?transport=tcp' // TLS qua cổng 443 (an toàn nhất)
+        'turn:freestun.net:3479',           // UDP
+        'turn:freestun.net:3479?transport=tcp', // TCP
+        'turns:freestun.net:5350'           // TLS
       ],
-      username: 'openrelayproject',
-      credential: 'openrelayproject'
-    }
+      username: 'free',
+      credential: 'free'
+    },
+
+    // ---- TURN: Metered.ca — đăng ký miễn phí để lấy credentials ----
+    // Tạo tài khoản tại https://www.metered.ca/ → Dashboard → TURN Credentials
+    // Thay YOUR_KEY_ID và YOUR_KEY_SECRET bên dưới:
+    // {
+    //   urls: [
+    //     'turn:relay.metered.ca:80',
+    //     'turn:relay.metered.ca:443',
+    //     'turn:relay.metered.ca:443?transport=tcp',
+    //     'turns:relay.metered.ca:443?transport=tcp'
+    //   ],
+    //   username: 'YOUR_KEY_ID',
+    //   credential: 'YOUR_KEY_SECRET'
+    // }
   ],
   iceCandidatePoolSize: 10
 };
