@@ -35,9 +35,9 @@
     │  STUN: stun.l.google.com:19302                       │
     │        → phản chiếu IP công cộng (srflx candidate)  │
     │                                                      │
-    │  TURN: openrelay.metered.ca                          │
+    │  TURN: global.relay.metered.ca (Metered.ca)           │
     │        → relay media khi P2P thất bại (relay cand.) │
-    │        Ports: UDP 80/443, TCP 443, TLS 443           │
+    │        Ports: UDP 80/443, TCP 80/443, TLS 443        │
     └─────────────────────────────────────────────────────┘
 ```
 
@@ -47,7 +47,7 @@
 |---|---|---|
 | Signaling Server | Node.js + Express + `ws` | Chuyển tiếp SDP/ICE giữa các peer |
 | Client | HTML5 + Vanilla JS | `getUserMedia` + `RTCPeerConnection` |
-| TURN Server | Open Relay (`openrelay.metered.ca`) | Relay media khi P2P thất bại |
+| TURN Server | Metered.ca (`global.relay.metered.ca`) | Relay media khi P2P thất bại |
 | Cloud Deploy | Render.com (free tier) | HTTPS tự động, truy cập từ internet |
 
 ### 1.3 Cấu trúc thư mục
@@ -61,7 +61,6 @@ WebRTC_HCMUS/
 │   ├── style.css      ← Glassmorphism UI, responsive mobile
 │   ├── app.js         ← Client WebRTC: mesh, ICE logging, screen share, pin
 │   └── ice-config.js  ← Cấu hình STUN + TURN
-├── TURN-SETUP.md      ← Hướng dẫn tự triển khai coturn
 └── README.md          ← Hướng dẫn chạy dự án
 ```
 
@@ -182,7 +181,7 @@ for (const peer of existingPeers) {
 
 ### 4.1 TURN Server sử dụng
 
-**Open Relay Project** (`openrelay.metered.ca`) — dịch vụ TURN công cộng, miễn phí, không cần đăng ký. Phù hợp cho demo và kiểm thử học thuật.
+**Metered.ca** (`global.relay.metered.ca`) — dịch vụ TURN được quản lý, hỗ trợ UDP/TCP/TLS, có server toàn cầu. Đăng ký tài khoản miễn phí để lấy credentials riêng.
 
 ### 4.2 Cấu hình `public/ice-config.js`
 
@@ -192,18 +191,17 @@ window.ICE_CONFIG = {
     // ── STUN: khám phá IP công cộng, sinh srflx candidate ──
     { urls: 'stun:stun.l.google.com:19302' },
     { urls: 'stun:stun1.l.google.com:19302' },
+    { urls: 'stun:stun.relay.metered.ca:80' },
 
-    // ── TURN: relay media khi P2P thất bại ──
-    {
-      urls: [
-        'turn:openrelay.metered.ca:80',             // UDP, port 80
-        'turn:openrelay.metered.ca:443',             // UDP, port 443
-        'turn:openrelay.metered.ca:443?transport=tcp', // TCP, port 443
-        'turns:openrelay.metered.ca:443?transport=tcp' // TLS, port 443
-      ],
-      username:   'openrelayproject',
-      credential: 'openrelayproject'
-    }
+    // ── TURN: Metered.ca — relay media khi P2P thất bại ──
+    { urls: 'turn:global.relay.metered.ca:80',
+      username: 'd46e67e07f9d963bcf05dfde', credential: 'fUDzIKkrP1EtUgrw' },
+    { urls: 'turn:global.relay.metered.ca:80?transport=tcp',
+      username: 'd46e67e07f9d963bcf05dfde', credential: 'fUDzIKkrP1EtUgrw' },
+    { urls: 'turn:global.relay.metered.ca:443',
+      username: 'd46e67e07f9d963bcf05dfde', credential: 'fUDzIKkrP1EtUgrw' },
+    { urls: 'turns:global.relay.metered.ca:443?transport=tcp',
+      username: 'd46e67e07f9d963bcf05dfde', credential: 'fUDzIKkrP1EtUgrw' },
   ],
   iceCandidatePoolSize: 10
 };
@@ -213,13 +211,15 @@ window.ICE_CONFIG = {
 
 | Thông số | Giá trị |
 |---|---|
-| Host | `openrelay.metered.ca` |
+| Host | `global.relay.metered.ca` |
+| STUN | `stun.relay.metered.ca:80` |
 | UDP port | 80, 443 |
-| TCP port | 443 |
+| TCP port | 80, 443 |
 | TLS port (TURNS) | 443 |
-| Username | `openrelayproject` |
-| Credential | `openrelayproject` |
+| Username | `d46e67e07f9d963bcf05dfde` |
+| Credential | `fUDzIKkrP1EtUgrw` |
 | Protocol | Long-term credential (RFC 5389) |
+| Provider | Metered.ca (có SLA, server toàn cầu) |
 
 ### 4.4 Cơ chế fallback tự động
 
@@ -239,16 +239,19 @@ pc.onconnectionstatechange = () => {
 };
 ```
 
-### 4.5 Tự triển khai coturn (tùy chọn)
+### 4.5 Kiểm tra TURN server (diagnostic built-in)
 
-Hướng dẫn chi tiết trong `TURN-SETUP.md`. Tóm tắt nhanh với Docker:
+Ứng dụng tích hợp sẵn hàm kiểm tra TURN khi tải trang. Kết quả xuất hiện trong console:
 
-```bash
-docker run -d --name coturn --network=host coturn/coturn \
-  -n --log-file=stdout \
-  --external-ip=$(curl -s https://api.ipify.org) \
-  --realm=my-turn.example.com \
-  --user=webrtcuser:password123
+```
+🔍 TURN Server Diagnostic
+  ✅ global.relay.metered.ca:80 — TURN hoạt động (relay: xx.xx.xx.xx)
+```
+
+Có thể gọi lại bất kỳ lúc nào từ console của trình duyệt:
+
+```javascript
+window.checkTurn()
 ```
 
 ---
@@ -353,7 +356,7 @@ docker run -d --name coturn --network=host coturn/coturn \
 | Quản lý room (join/leave/broadcast) | ✅ | `Map<roomId, Map<clientId, peer>>` |
 | Gọi nhóm mesh (≥3 người) | ✅ | N×(N−1)/2 RTCPeerConnection |
 | STUN (Google) | ✅ | `stun.l.google.com:19302` |
-| TURN (Open Relay) | ✅ | UDP/TCP/TLS, tự động fallback 12s |
+| TURN (Metered.ca) | ✅ | UDP/TCP/TLS, tự động fallback 12s |
 | P2P fallback → restartIce() | ✅ | Timeout 12s + `connectionState=failed` |
 | Thống kê candidate (getStats) | ✅ | Log loại `host/srflx/relay` |
 | Video grid responsive | ✅ | `auto-fit, minmax(280px, 1fr)` |
@@ -374,7 +377,7 @@ docker run -d --name coturn --network=host coturn/coturn \
 | Hạn chế | Mô tả |
 |---|---|
 | **Mesh băng thông** | Upload tăng tuyến tính: 6 người = 5 stream upload. Phù hợp ≤6 người. |
-| **Open Relay giới hạn** | Dịch vụ miễn phí, không có SLA, có thể không ổn định khi tải lớn. |
+| **Metered.ca free tier** | 500MB/tháng. Vượt giới hạn cần nâng cấp hoặc tự host coturn. |
 | **Không xác thực** | Phòng không có mật khẩu — ai biết roomId đều vào được. |
 | **Render free tier** | Sleep sau 15 phút không có request (~30s wake up). |
 | **Không lưu lịch sử chat** | Chat mất khi refresh trang. |
@@ -384,7 +387,7 @@ docker run -d --name coturn --network=host coturn/coturn \
 | Cải tiến | Lợi ích |
 |---|---|
 | **SFU (mediasoup/LiveKit)** | Mỗi client chỉ upload 1 stream → phù hợp 10-100 người |
-| **Coturn tự host** | Chủ động kiểm soát băng thông, SLA, credential tạm thời |
+| **Coturn tự host / Metered.ca nâng cấp** | Chủ động kiểm soát băng thông, SLA, credential tạm thời |
 | **TURN credentials ngắn hạn** | Bảo mật hơn (HMAC-SHA1, RFC 7635), tránh lạm dụng |
 | **Xác thực phòng** | PIN/password để bảo vệ phòng riêng tư |
 | **Recording** | Ghi lại cuộc gọi phía server (SFU mode) |

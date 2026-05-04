@@ -3,7 +3,7 @@
 Ứng dụng gọi video nhóm bằng WebRTC với:
 - **Room ID**: nhiều người vào cùng một phòng bằng mã phòng.
 - **Mesh topology**: mỗi peer kết nối P2P với tất cả các peer khác trong phòng.
-- **ICE đầy đủ**: STUN (Google) + TURN (Open Relay, miễn phí) — gọi được qua internet, xuyên NAT/firewall.
+- **ICE đầy đủ**: STUN (Google) + TURN (Metered.ca) — gọi được qua internet, xuyên NAT/firewall.
 - **Chat text** đi qua signaling server.
 - Bật/tắt mic, cam, sao chép Room ID.
 
@@ -24,9 +24,9 @@
                               │ khi P2P thất bại (NAT đối xứng, firewall)
                               ↓
                  ┌──────────────────────────────┐
-                 │ TURN: Open Relay             │  ← relay toàn bộ media
-                 │ openrelay.metered.ca         │    (relay candidate)
-                 │ Miễn phí, không cần VPS      │
+                 │ TURN: Metered.ca             │  ← relay toàn bộ media
+                 │ global.relay.metered.ca      │    (relay candidate)
+                 │ UDP 80/443, TCP 80/443, TLS  │
                  └──────────────────────────────┘
 ```
 
@@ -41,7 +41,6 @@ WebRTC_HCMUS/
 │   ├── style.css
 │   ├── app.js             ← Client WebRTC (mesh + ICE logging)
 │   └── ice-config.js      ← Cấu hình STUN + TURN
-├── TURN-SETUP.md          ← Hướng dẫn tự cài coturn trên VPS (tham khảo thêm)
 ├── report.md              ← Báo cáo nộp bài
 └── README.md
 ```
@@ -123,24 +122,35 @@ window.ICE_CONFIG = {
     // STUN: giúp peer biết IP công cộng → sinh srflx candidate
     { urls: 'stun:stun.l.google.com:19302' },
     { urls: 'stun:stun1.l.google.com:19302' },
+    { urls: 'stun:stun.relay.metered.ca:80' },
 
-    // TURN: relay media khi P2P thất bại → sinh relay candidate
+    // TURN: Metered.ca — relay media khi P2P thất bại → sinh relay candidate
     {
-      urls: [
-        'turn:openrelay.metered.ca:80',               // UDP port 80
-        'turn:openrelay.metered.ca:443',              // UDP port 443
-        'turn:openrelay.metered.ca:443?transport=tcp',// TCP port 443
-        'turns:openrelay.metered.ca:443?transport=tcp'// TLS port 443
-      ],
-      username: 'openrelayproject',
-      credential: 'openrelayproject'
+      urls: 'turn:global.relay.metered.ca:80',
+      username: 'd46e67e07f9d963bcf05dfde',
+      credential: 'fUDzIKkrP1EtUgrw'
+    },
+    {
+      urls: 'turn:global.relay.metered.ca:80?transport=tcp',
+      username: 'd46e67e07f9d963bcf05dfde',
+      credential: 'fUDzIKkrP1EtUgrw'
+    },
+    {
+      urls: 'turn:global.relay.metered.ca:443',
+      username: 'd46e67e07f9d963bcf05dfde',
+      credential: 'fUDzIKkrP1EtUgrw'
+    },
+    {
+      urls: 'turns:global.relay.metered.ca:443?transport=tcp',
+      username: 'd46e67e07f9d963bcf05dfde',
+      credential: 'fUDzIKkrP1EtUgrw'
     }
   ],
   iceCandidatePoolSize: 10
 };
 ```
 
-**Không cần VPS hay tự vận hành TURN server.** Open Relay là dịch vụ miễn phí, đủ dùng để demo và kiểm thử bài tập.
+**Không cần VPS hay tự vận hành TURN server.** Metered.ca cung cấp TURN server toàn cầu (`global.relay.metered.ca`), hỗ trợ UDP/TCP/TLS — xuyên được hầu hết NAT và firewall.
 
 ---
 
@@ -152,8 +162,9 @@ Không cần thay đổi gì trong code. Chỉ cần:
 2. Một thiết bị dùng **WiFi nhà**, thiết bị kia bật **4G** (khác mạng).
 3. Cùng vào một Room ID.
 4. Nếu P2P thất bại, TURN sẽ tự động relay — xem log console:
-   - `Candidate gathered: typ=relay` → TURN đang được dùng
+   - `Candidate gathered: typ=relay` → TURN Metered.ca đang được dùng
    - `Loại candidate: relay` trong thống kê cuối cùng
+   - Có thể chạy `window.checkTurn()` trong console để kiểm tra TURN trước khi gọi
 
 ---
 
@@ -195,7 +206,7 @@ Mesh phù hợp ≤6 người. Lớn hơn nên dùng SFU (mediasoup, LiveKit…)
 
 - [x] Signaling server (WSS, nhiều phòng, mesh)
 - [x] Client WebRTC với `RTCPeerConnection` + `getUserMedia`
-- [x] Cấu hình `iceServers` đầy đủ: STUN (Google) + TURN (Open Relay)
+- [x] Cấu hình `iceServers` đầy đủ: STUN (Google) + TURN (Metered.ca `global.relay.metered.ca`)
 - [x] Log candidate type (`host` / `srflx` / `relay`) trong console
 - [x] Fallback: timeout 12s → `restartIce()` nếu P2P thất bại
 - [x] Giải thích ICE flow và 3 loại candidate trong `ice-config.js` + `report.md`
@@ -218,5 +229,5 @@ Mesh phù hợp ≤6 người. Lớn hơn nên dùng SFU (mediasoup, LiveKit…)
 | Không connect được | DevTools → Console xem `iceConnectionState` |
 | Muốn xem phòng đang mở | Mở `https://<server>/rooms` |
 | Xem chi tiết ICE | Chrome: `chrome://webrtc-internals/` |
-| TURN có hoạt động không | Console phải có `Candidate gathered: typ=relay` |
+| TURN có hoạt động không | Console phải có `Candidate gathered: typ=relay` hoặc chạy `window.checkTurn()` |
 | Server sleep (Render free) | Tải lại trang, chờ ~30s để wake up |
