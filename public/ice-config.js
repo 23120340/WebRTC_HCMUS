@@ -2,61 +2,133 @@
  * ============================================================
  *  CẤU HÌNH ICE SERVERS (STUN + TURN)
  * ============================================================
- *  WebRTC dùng framework ICE (Interactive Connectivity
- *  Establishment) để tìm đường kết nối tốt nhất. Có 3 loại
- *  ICE candidate theo thứ tự ưu tiên giảm dần:
- *
- *  1. host   — IP nội bộ (LAN/loopback). Kết nối P2P trực tiếp
- *              khi cả hai peer cùng mạng. Nhanh nhất, không qua
- *              server trung gian.
- *
- *  2. srflx  — Server Reflexive. STUN server phản chiếu lại IP
- *              công cộng (public IP) của peer sau NAT. Dùng khi
- *              2 peer khác mạng nhưng NAT đơn giản (full-cone /
- *              port-restricted cone).
- *
- *  3. relay  — TURN server relay toàn bộ media. Bắt buộc khi
- *              một hoặc cả hai peer nằm sau symmetric NAT hoặc
- *              firewall chặt UDP (thường gặp với 4G/5G).
- *
- *  Cấu hình này dùng:
- *  - STUN : Google STUN (miễn phí, công khai)
- *  - TURN : freestun.net (miễn phí, không cần đăng ký)
- *           + Metered.ca (đăng ký miễn phí tại metered.ca
- *             → App Settings → TURN Credentials)
+ *  1. host   — IP nội bộ (LAN). P2P trực tiếp khi cùng mạng.
+ *  2. srflx  — STUN phản chiếu IP công cộng sau NAT đơn giản.
+ *  3. relay  — TURN relay toàn bộ media. Bắt buộc khi một bên
+ *              nằm sau symmetric NAT hoặc firewall (thường là 4G/5G).
  * ============================================================
  */
+
+// ---- Danh sách TURN servers (thử theo thứ tự) ----
+const TURN_SERVERS = [
+  // Open Relay — public, không cần tài khoản (rate-limited)
+  {
+    urls: [
+      'turn:openrelay.metered.ca:80',
+      'turn:openrelay.metered.ca:443',
+      'turn:openrelay.metered.ca:443?transport=tcp',
+      'turns:openrelay.metered.ca:443?transport=tcp'
+    ],
+    username: 'openrelayproject',
+    credential: 'openrelayproject'
+  },
+
+  // ---- Metered.ca riêng (thay YOUR_KEY_ID / YOUR_KEY_SECRET) ----
+  // Đăng ký miễn phí: https://www.metered.ca/ → Dashboard → TURN Credentials
+  // {
+  //   urls: [
+  //     'turn:relay.metered.ca:80',
+  //     'turn:relay.metered.ca:443',
+  //     'turn:relay.metered.ca:443?transport=tcp',
+  //     'turns:relay.metered.ca:443?transport=tcp'
+  //   ],
+  //   username: 'YOUR_KEY_ID',
+  //   credential: 'YOUR_KEY_SECRET'
+  // },
+];
+
 window.ICE_CONFIG = {
   iceServers: [
-    // ---- STUN: giúp peer khám phá IP công cộng → sinh srflx candidate ----
     { urls: 'stun:stun.l.google.com:19302' },
     { urls: 'stun:stun1.l.google.com:19302' },
-
-    // ---- TURN: Open Relay (metered.ca) — public, không cần tài khoản ----
-    {
-      urls: [
-        'turn:openrelay.metered.ca:80',
-        'turn:openrelay.metered.ca:443',
-        'turn:openrelay.metered.ca:443?transport=tcp',
-        'turns:openrelay.metered.ca:443?transport=tcp'
-      ],
-      username: 'openrelayproject',
-      credential: 'openrelayproject'
-    },
-
-    // ---- TURN: Metered.ca — đăng ký miễn phí để lấy credentials riêng ----
-    // Tạo tài khoản tại https://www.metered.ca/ → Dashboard → TURN Credentials
-    // Thay YOUR_KEY_ID và YOUR_KEY_SECRET bên dưới để có băng thông ổn định hơn:
-    // {
-    //   urls: [
-    //     'turn:relay.metered.ca:80',
-    //     'turn:relay.metered.ca:443',
-    //     'turn:relay.metered.ca:443?transport=tcp',
-    //     'turns:relay.metered.ca:443?transport=tcp'
-    //   ],
-    //   username: 'YOUR_KEY_ID',
-    //   credential: 'YOUR_KEY_SECRET'
-    // }
+    ...TURN_SERVERS
   ],
   iceCandidatePoolSize: 10
 };
+
+// ============================================================
+//  TURN CONNECTIVITY DIAGNOSTIC
+//  Chạy khi page load — logs vào console để debug
+// ============================================================
+async function probeTurnServer(serverConfig, label) {
+  return new Promise((resolve) => {
+    const pc = new RTCPeerConnection({
+      iceServers: [serverConfig],
+      iceTransportPolicy: 'relay'  // chỉ cho phép relay → buộc dùng TURN
+    });
+
+    let found = false;
+    const timer = setTimeout(() => {
+      pc.close();
+      resolve({ label, ok: false, reason: 'timeout 5s' });
+    }, 5000);
+
+    pc.onicecandidate = (e) => {
+      if (e.candidate && e.candidate.type === 'relay' && !found) {
+        found = true;
+        clearTimeout(timer);
+        pc.close();
+        resolve({ label, ok: true, candidate: e.candidate.address });
+      }
+    };
+
+    pc.onicegatheringstatechange = () => {
+      if (pc.iceGatheringState === 'complete' && !found) {
+        clearTimeout(timer);
+        pc.close();
+        resolve({ label, ok: false, reason: 'gathering complete, no relay' });
+      }
+    };
+
+    // Cần data channel để trigger ICE gathering
+    pc.createDataChannel('probe');
+    pc.createOffer()
+      .then(o => pc.setLocalDescription(o))
+      .catch(err => {
+        clearTimeout(timer);
+        pc.close();
+        resolve({ label, ok: false, reason: err.message });
+      });
+  });
+}
+
+async function runTurnDiagnostic() {
+  console.group('%c🔍 TURN Server Diagnostic', 'font-weight:bold;color:#60a5fa');
+  const results = await Promise.all(
+    TURN_SERVERS.map((srv, i) => {
+      const urls = Array.isArray(srv.urls) ? srv.urls : [srv.urls];
+      const label = urls[0].replace('turn:', '').replace('turns:', '');
+      return probeTurnServer(srv, label);
+    })
+  );
+
+  let anyOk = false;
+  for (const r of results) {
+    if (r.ok) {
+      console.log(`%c  ✅ ${r.label} — TURN hoạt động (relay: ${r.candidate})`, 'color:#4ade80');
+      anyOk = true;
+    } else {
+      console.warn(`  ❌ ${r.label} — THẤT BẠI (${r.reason})`);
+    }
+  }
+
+  if (!anyOk) {
+    console.error(
+      '  ⚠️  Không có TURN server nào hoạt động!\n' +
+      '  → Kết nối với mobile/4G sẽ thất bại.\n' +
+      '  → Kiểm tra mạng có chặn UDP/TCP 443 ra ngoài không.\n' +
+      '  → Đăng ký metered.ca để có TURN server riêng đáng tin cậy.'
+    );
+  }
+  console.groupEnd();
+  return anyOk;
+}
+
+// Chạy diagnostic sau khi page load xong
+window.addEventListener('DOMContentLoaded', () => {
+  // Chạy sau 500ms để không tranh CPU với render ban đầu
+  setTimeout(runTurnDiagnostic, 500);
+});
+
+// Cho phép gọi lại từ console: window.checkTurn()
+window.checkTurn = runTurnDiagnostic;
