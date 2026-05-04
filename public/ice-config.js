@@ -9,32 +9,31 @@
  * ============================================================
  */
 
-// ---- Danh sách TURN servers (thử theo thứ tự) ----
 const TURN_SERVERS = [
-  // Open Relay — public, không cần tài khoản (rate-limited)
+  // Metered.ca — TURN server riêng (ưu tiên)
   {
-    urls: [
-      'turn:openrelay.metered.ca:80',
-      'turn:openrelay.metered.ca:443',
-      'turn:openrelay.metered.ca:443?transport=tcp',
-      'turns:openrelay.metered.ca:443?transport=tcp'
-    ],
-    username: 'openrelayproject',
-    credential: 'openrelayproject'
+    urls: 'stun:stun.relay.metered.ca:80'
   },
-
-  // ---- Metered.ca riêng (thay YOUR_KEY_ID / YOUR_KEY_SECRET) ----
-  // Đăng ký miễn phí: https://www.metered.ca/ → Dashboard → TURN Credentials
-  // {
-  //   urls: [
-  //     'turn:relay.metered.ca:80',
-  //     'turn:relay.metered.ca:443',
-  //     'turn:relay.metered.ca:443?transport=tcp',
-  //     'turns:relay.metered.ca:443?transport=tcp'
-  //   ],
-  //   username: 'YOUR_KEY_ID',
-  //   credential: 'YOUR_KEY_SECRET'
-  // },
+  {
+    urls: 'turn:global.relay.metered.ca:80',
+    username: 'd46e67e07f9d963bcf05dfde',
+    credential: 'fUDzIKkrP1EtUgrw'
+  },
+  {
+    urls: 'turn:global.relay.metered.ca:80?transport=tcp',
+    username: 'd46e67e07f9d963bcf05dfde',
+    credential: 'fUDzIKkrP1EtUgrw'
+  },
+  {
+    urls: 'turn:global.relay.metered.ca:443',
+    username: 'd46e67e07f9d963bcf05dfde',
+    credential: 'fUDzIKkrP1EtUgrw'
+  },
+  {
+    urls: 'turns:global.relay.metered.ca:443?transport=tcp',
+    username: 'd46e67e07f9d963bcf05dfde',
+    credential: 'fUDzIKkrP1EtUgrw'
+  },
 ];
 
 window.ICE_CONFIG = {
