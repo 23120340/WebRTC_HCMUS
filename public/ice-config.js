@@ -32,20 +32,21 @@ window.ICE_CONFIG = {
     { urls: 'stun:stun.l.google.com:19302' },
     { urls: 'stun:stun1.l.google.com:19302' },
 
-    // ---- TURN: freestun.net — miễn phí, không cần tài khoản ----
+    // ---- TURN: Open Relay (metered.ca) — public, không cần tài khoản ----
     {
       urls: [
-        'turn:freestun.net:3479',           // UDP
-        'turn:freestun.net:3479?transport=tcp', // TCP
-        'turns:freestun.net:5350'           // TLS
+        'turn:openrelay.metered.ca:80',
+        'turn:openrelay.metered.ca:443',
+        'turn:openrelay.metered.ca:443?transport=tcp',
+        'turns:openrelay.metered.ca:443?transport=tcp'
       ],
-      username: 'free',
-      credential: 'free'
+      username: 'openrelayproject',
+      credential: 'openrelayproject'
     },
 
-    // ---- TURN: Metered.ca — đăng ký miễn phí để lấy credentials ----
+    // ---- TURN: Metered.ca — đăng ký miễn phí để lấy credentials riêng ----
     // Tạo tài khoản tại https://www.metered.ca/ → Dashboard → TURN Credentials
-    // Thay YOUR_KEY_ID và YOUR_KEY_SECRET bên dưới:
+    // Thay YOUR_KEY_ID và YOUR_KEY_SECRET bên dưới để có băng thông ổn định hơn:
     // {
     //   urls: [
     //     'turn:relay.metered.ca:80',
